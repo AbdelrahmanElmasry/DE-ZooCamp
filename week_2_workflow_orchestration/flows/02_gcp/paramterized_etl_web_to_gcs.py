@@ -1,10 +1,12 @@
 from pathlib import Path
 import pandas as pd
 from prefect import flow, task
+from prefect.tasks import task_input_hash
 from prefect_gcp.cloud_storage import GcsBucket
+from datetime import timedelta
 
 @task(retries= 3)
-def fetch(url: str) -> pd.DataFrame:
+def fetch(url: str, cache_key_fn= task_input_hash, cache_expiration=timedelta(days=1)) -> pd.DataFrame:
     """Read Taxi data from web into pandas Dataframe"""
 
     df = pd.read_csv(url)
@@ -44,11 +46,11 @@ def write_gcs(path: Path) -> None :
 
 
 @flow()
-def etl_web_to_gcs() -> None:
+def etl_web_to_gcs(year: int, month: int, color: str) -> None:
     """The main ETL function"""
-    color = "green"
-    year = 2019
-    month = 4
+    # color = "yellow"
+    # year = 2021
+    # month = 1
     dataset_file = f"{color}_tripdata_{year}-{month:02}"
     dataset_url = f"https://github.com/DataTalksClub/nyc-tlc-data/releases/download/{color}/{dataset_file}.csv.gz"
 
@@ -57,6 +59,18 @@ def etl_web_to_gcs() -> None:
     df_path = write_local(df_clean, color, dataset_file)
     write_gcs(df_path)
 
+@flow()
+def etl_parent_flow(
+    months: list[int] = [1, 2],
+    year: int = 2021,
+    color: str = "yellow" 
+):
+    for month in months:
+        etl_web_to_gcs(year, month, color)
+
 
 if __name__ == '__main__':
-    etl_web_to_gcs()
+    color="yellow"
+    months = [1, 2, 3]
+    year = 2021
+    etl_parent_flow(year, months, color)
